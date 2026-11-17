@@ -44,7 +44,7 @@ Die Schreibweisen `-`, `*`, `/` für `−`, `×`, `÷` und `x<>y` für `x↔y` n
 
 ## Rechnen
 
-- Rechne dezimal mit **10 signifikanten Stellen** (Rundung auf die nächste Stelle, .5 nach oben). Zwischenwerte im Stack behalten alle 10 Stellen.
+- Rechne dezimal mit **10 signifikanten Stellen** (Rundung auf die nächste Stelle, bei .5 weg von 0). Zwischenwerte im Stack behalten alle 10 Stellen.
 - **Fehler:** Division durch 0 und `1/x` von 0 melden `Error 0`; die Operation entfällt, Stack, LASTx und Lift bleiben wie vor dieser Taste, die übrigen Tasten des Aufrufs werden nicht mehr ausgeführt. Eine unbekannte Taste meldet `Error: unbekannte Taste <taste>` mit demselben Verhalten.
 - Gehe die Tasten **eine nach der anderen** durch und führe den Stack mit.
 

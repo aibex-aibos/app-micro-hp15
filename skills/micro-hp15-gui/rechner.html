@@ -1,0 +1,197 @@
+<style>
+.mh-wrap { max-width: 320px; margin: 0 auto; font-family: system-ui, sans-serif; }
+.mh-disp { border-radius: 8px; padding: 10px 12px; text-align: right; background: rgba(127, 127, 127, 0.12); margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+.mh-y { font-size: 14px; opacity: 0.7; min-height: 18px; }
+.mh-x { font-size: 30px; line-height: 1.2; }
+.mh-msg { font-size: 12px; min-height: 16px; opacity: 0.7; margin-bottom: 6px; }
+.mh-keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.mh-key { padding: 12px 0; border-radius: 6px; border: 1px solid rgba(127, 127, 127, 0.4); background: rgba(127, 127, 127, 0.15); color: inherit; font-size: 15px; cursor: pointer; }
+.mh-key:hover { background: rgba(127, 127, 127, 0.28); }
+.mh-fn { font-size: 13px; }
+</style>
+<div class="mh-wrap">
+  <div class="mh-disp"><div class="mh-y" id="mh-y"></div><div class="mh-x" id="mh-x"></div></div>
+  <div class="mh-msg" id="mh-msg"></div>
+  <div class="mh-keys" id="mh-keys"></div>
+</div>
+<script>
+// CORE-BEGIN
+// Dezimalarithmetik mit 10 signifikanten Stellen: Wert = m * 10^e (m BigInt).
+var DIG = 10;
+function D(m, e) { return { m: m, e: e }; }
+var ZERO = D(0n, 0);
+var ONE = D(1n, 0);
+function ndigits(m) { return (m < 0n ? -m : m).toString().length; }
+function norm(d) {
+  var m = d.m, e = d.e;
+  if (m === 0n) return ZERO;
+  var n = ndigits(m);
+  if (n > DIG) {
+    var k = n - DIG, p = 10n ** BigInt(k), neg = m < 0n, a = neg ? -m : m;
+    var q = a / p;
+    if ((a % p) * 2n >= p) q += 1n;
+    m = neg ? -q : q;
+    e += k;
+    if (ndigits(m) > DIG) { m = m / 10n; e += 1; }
+  }
+  while (m % 10n === 0n) { m = m / 10n; e += 1; }
+  return D(m, e);
+}
+function parse(s) {
+  var t = /^(-?)(\d*)\.?(\d*)(?:[eE]([+-]?\d+))?$/.exec(String(s).trim());
+  if (!t || (t[2] === '' && t[3] === '')) return ZERO;
+  var m = BigInt(t[2] + t[3]);
+  var e = (t[4] ? parseInt(t[4], 10) : 0) - t[3].length;
+  if (t[1]) m = -m;
+  return norm(D(m, e));
+}
+function neg(a) { return D(-a.m, a.e); }
+function add(a, b) {
+  var e = Math.min(a.e, b.e);
+  return norm(D(a.m * 10n ** BigInt(a.e - e) + b.m * 10n ** BigInt(b.e - e), e));
+}
+function sub(a, b) { return add(a, neg(b)); }
+function mul(a, b) { return norm(D(a.m * b.m, a.e + b.e)); }
+function div(a, b) {
+  if (b.m === 0n) throw new Error('Error 0');
+  var isNeg = (a.m < 0n) !== (b.m < 0n);
+  var A = a.m < 0n ? -a.m : a.m, B = b.m < 0n ? -b.m : b.m;
+  var s = Math.max(0, DIG + 2 + ndigits(B) - ndigits(A));
+  var num = A * 10n ** BigInt(s);
+  var q = num / B;
+  q = q * 10n + (num % B !== 0n ? 1n : 0n);
+  return norm(D(isNeg ? -q : q, a.e - b.e - s - 1));
+}
+function fmt(d) {
+  var k = d.e + 4, n;
+  if (k >= 0) {
+    n = d.m * 10n ** BigInt(k);
+  } else {
+    var p = 10n ** BigInt(-k), isNeg = d.m < 0n, a = isNeg ? -d.m : d.m, q = a / p;
+    if ((a % p) * 2n >= p) q += 1n;
+    n = isNeg ? -q : q;
+  }
+  var s = (n < 0n ? -n : n).toString();
+  while (s.length < 5) s = '0' + s;
+  return (n < 0n ? '-' : '') + s.slice(0, -4) + '.' + s.slice(-4);
+}
+function str(d) {
+  if (d.m === 0n) return '0';
+  var isNeg = d.m < 0n, s = (isNeg ? -d.m : d.m).toString(), r;
+  if (d.e >= 0) {
+    r = s + '0'.repeat(d.e);
+  } else {
+    var k = -d.e;
+    if (s.length <= k) s = '0'.repeat(k - s.length + 1) + s;
+    r = s.slice(0, s.length - k) + '.' + s.slice(s.length - k);
+  }
+  return (isNeg ? '-' : '') + r;
+}
+function newCalc(regs) {
+  return { x: ZERO, y: ZERO, z: ZERO, t: ZERO, last: ZERO, lift: true, entry: null, regs: regs };
+}
+function pushStack(c) { c.t = c.z; c.z = c.y; c.y = c.x; }
+function endEntry(c) { if (c.entry !== null) { c.entry = null; c.lift = true; } }
+// Eine Taste ausführen. Ergebnis: {} | {error: 'Error 0'} | {save: {n, value}}
+function key(c, k, n) {
+  try {
+    if (/^[0-9.]$/.test(k)) {
+      if (c.entry === null) { if (c.lift) pushStack(c); c.entry = ''; }
+      if (k === '.' && c.entry.indexOf('.') >= 0) return {};
+      if (k !== '.' && c.entry.replace(/[^0-9]/g, '').length >= DIG) return {};
+      c.entry += k;
+      c.x = parse(c.entry);
+      return {};
+    }
+    if (k === 'CHS') {
+      if (c.entry !== null) {
+        c.entry = c.entry.charAt(0) === '-' ? c.entry.slice(1) : '-' + c.entry;
+        c.x = parse(c.entry);
+      } else {
+        c.x = neg(c.x);
+      }
+      return {};
+    }
+    endEntry(c);
+    var r;
+    switch (k) {
+      case 'ENTER': pushStack(c); c.lift = false; return {};
+      case '+': case '−': case '×': case '÷':
+        r = k === '+' ? add(c.y, c.x) : k === '−' ? sub(c.y, c.x) : k === '×' ? mul(c.y, c.x) : div(c.y, c.x);
+        c.last = c.x; c.x = r; c.y = c.z; c.z = c.t; c.lift = true;
+        return {};
+      case '1/x': r = div(ONE, c.x); c.last = c.x; c.x = r; c.lift = true; return {};
+      case 'x↔y': r = c.x; c.x = c.y; c.y = r; c.lift = true; return {};
+      case 'R↓': r = c.x; c.x = c.y; c.y = c.z; c.z = c.t; c.t = r; c.lift = true; return {};
+      case 'CLx': c.x = ZERO; c.lift = false; return {};
+      case 'LASTx': if (c.lift) pushStack(c); c.x = c.last; c.lift = true; return {};
+      case 'STO': c.regs[n] = c.x; return { save: { n: n, value: str(c.x) } };
+      case 'RCL': if (c.lift) pushStack(c); c.x = c.regs[n]; c.lift = true; return {};
+    }
+    return { error: 'Error: unbekannte Taste ' + k };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+// CORE-END
+
+var saved = {{aibos-data register.yaml}};
+var regs = [];
+for (var i = 0; i < 10; i++) {
+  regs.push(parse(saved && saved['R' + i] !== undefined && saved['R' + i] !== null ? saved['R' + i] : 0));
+}
+var calc = newCalc(regs);
+var pending = null;
+var msg = '';
+var layout = [
+  ['STO', 'RCL', 'x↔y', 'R↓'],
+  ['1/x', 'LASTx', 'CLx', 'CHS'],
+  ['7', '8', '9', '÷'],
+  ['4', '5', '6', '×'],
+  ['1', '2', '3', '−'],
+  ['0', '.', 'ENTER', '+']
+];
+function render() {
+  document.getElementById('mh-x').textContent = calc.entry !== null ? (calc.entry === '' ? '0' : calc.entry) : fmt(calc.x);
+  document.getElementById('mh-y').textContent = 'Y: ' + fmt(calc.y);
+  document.getElementById('mh-msg').textContent = pending ? pending + ' _ (Register 0-9)' : msg;
+}
+function press(k) {
+  msg = '';
+  if (pending) {
+    var p = pending;
+    pending = null;
+    if (/^[0-9]$/.test(k)) {
+      var res = key(calc, p, Number(k));
+      if (res.save) {
+        msg = 'R' + res.save.n + ' = ' + res.save.value + ': Speichern an Claude gesendet';
+        if (typeof sendPrompt === 'function') {
+          sendPrompt('Run the skill /micro-hp15. Save R' + res.save.n + ' = ' + res.save.value + '.');
+        }
+      }
+      render();
+      return;
+    }
+  }
+  if (k === 'STO' || k === 'RCL') {
+    pending = k;
+    render();
+    return;
+  }
+  var r = key(calc, k);
+  if (r.error) msg = r.error;
+  render();
+}
+var keysEl = document.getElementById('mh-keys');
+layout.forEach(function (row) {
+  row.forEach(function (k) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'mh-key' + (k.length > 1 ? ' mh-fn' : '');
+    b.textContent = k;
+    b.addEventListener('click', function () { press(k); });
+    keysEl.appendChild(b);
+  });
+});
+render();
+</script>
