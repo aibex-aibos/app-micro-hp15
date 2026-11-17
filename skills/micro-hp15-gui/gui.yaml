@@ -1,0 +1,7 @@
+title: Micro HP-15
+intro: RPN-Rechner mit Stack und den Registern R0–R9
+tiles:
+  - title: Rechner
+    text: Tastenfeld mit Anzeige X und Y; STO lässt Claude das Register speichern
+    html: rechner.html
+    icon: calculator
