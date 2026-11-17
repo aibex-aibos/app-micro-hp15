@@ -1,6 +1,6 @@
 ---
 name: micro-hp15
-version: 0.1.0
+version: 0.1.1
 description: >
   Rechnet Tastenfolgen in umgekehrter polnischer Notation (RPN) nach dem HP-15C mit
   Stack X, Y, Z, T und den Registern R0-R9 (STO, RCL) und speichert die Register in

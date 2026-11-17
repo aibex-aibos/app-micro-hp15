@@ -1,6 +1,6 @@
 ---
 name: micro-hp15-gui
-version: 0.1.0
+version: 0.1.1
 description: >
   Zeigt die Oberfläche des RPN-Rechners micro-hp15 (Tastenfeld mit Anzeige X und Y).
   Verwenden bei "/micro-hp15-gui", "Rechner öffnen", "Tastenfeld".
