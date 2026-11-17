@@ -1,5 +1,5 @@
 name: app-micro-hp15
-version: 0.1.0-rc1
+version: 0.1.0
 type: app
 description: RPN-Taschenrechner nach dem HP-15C mit Stack und Registern (STO, RCL), bedienbar im Chat und über eine Oberfläche
 requires:
